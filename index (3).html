@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Zentrix Platform</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    .hidden { display: none; }
+    .game-card, .item-card { border: 1px solid #ccc; padding: 10px; margin: 10px; width: 200px; display: inline-block; vertical-align: top; }
+    img { max-width: 100%; height: auto; }
+    button { cursor: pointer; padding: 5px 10px; margin-top: 5px; }
+    #profile img { width: 100px; border-radius: 50%; }
+    #messages { margin-top: 10px; color: green; }
+    #errors { margin-top: 10px; color: red; }
+  </style>
+</head>
+<body>
+
+  <h1>Zentrix Platform</h1>
+
+  <div id="auth-section">
+    <h2>Login</h2>
+    <input type="text" id="login-username" placeholder="Username" />
+    <input type="password" id="login-password" placeholder="Password" />
+    <button id="btn-login">Login</button>
+
+    <h2>Signup</h2>
+    <input type="text" id="signup-username" placeholder="Username" />
+    <input type="password" id="signup-password" placeholder="Password" />
+    <button id="btn-signup">Signup</button>
+  </div>
+
+  <div id="profile-section" class="hidden">
+    <h2>Profile</h2>
+    <div id="profile">
+      <img id="avatar-img" src="" alt="Avatar" />
+      <p>Username: <span id="profile-username"></span></p>
+      <p>Currency: <span id="profile-currency"></span></p>
+      <p>Badges: <span id="profile-badges"></span></p>
+      <p>Inventory:</p>
+      <div id="profile-inventory"></div>
+      <button id="btn-logout">Logout</button>
+    </div>
+  </div>
+
+  <hr />
+
+  <div id="games-section" class="hidden">
+    <h2>Games</h2>
+    <div id="games-list"></div>
+  </div>
+
+  <hr />
+
+  <div id="marketplace-section" class="hidden">
+    <h2>Marketplace</h2>
+    <div id="marketplace-list"></div>
+  </div>
+
+  <hr />
+
+  <div id="upload-section" class="hidden">
+    <h2>Upload New Game</h2>
+    <form id="upload-form">
+      <input type="text" id="game-title" placeholder="Game Title" required /><br /><br />
+      <textarea id="game-desc" placeholder="Game Description" required></textarea><br /><br />
+      Thumbnail: <input type="file" id="game-thumbnail" accept="image/*" required /><br /><br />
+      Game File: <input type="file" id="game-file" accept=".zip,.html,.js,.exe" required /><br /><br />
+      <button type="submit">Upload Game</button>
+    </form>
+  </div>
+
+  <div id="messages"></div>
+  <div id="errors"></div>
+
+  <script>
+    const API_BASE = 'http://localhost:3000/api';
+
+    // Utility to show messages
+    function showMessage(msg) {
+      const el = document.getElementById('messages');
+      el.textContent = msg;
+      setTimeout(() => { el.textContent = ''; }, 4000);
+    }
+    function showError(msg) {
+      const el = document.getElementById('errors');
+      el.textContent = msg;
+      setTimeout(() => { el.textContent = ''; }, 4000);
+    }
+
+    // Show/hide sections based on login
+    function showLoggedIn(user) {
+      document.getElementById('auth-section').classList.add('hidden');
+      document.getElementById('profile-section').classList.remove('hidden');
+      document.getElementById('games-section').classList.remove('hidden');
+      document.getElementById('marketplace-section').classList.remove('hidden');
+      document.getElementById('upload-section').classList.remove('hidden');
+
+      document.getElementById('profile-username').textContent = user.username;
+      document.getElementById('profile-currency').textContent = user.currency;
+      document.getElementById('avatar-img').src = user.avatar || 'https://via.placeholder.com/100?text=Avatar';
+
+      document.getElementById('profile-badges').textContent = user.badges.join(', ') || 'None';
+
+      // Inventory
+      const inv = document.getElementById('profile-inventory');
+      inv.innerHTML = '';
+      if (user.inventory.length === 0) {
+        inv.textContent = 'No items';
+      } else {
+        user.inventory.forEach(item => {
+          const div = document.createElement('div');
+          div.textContent = item.name + ' (' + item.type + ')';
+          inv.appendChild(div);
+        });
+      }
+    }
+
+    // Fetch profile info
+    async function loadProfile() {
+      const res = await fetch(`${API_BASE}/profile`, { credentials: 'include' });
+      if (!res.ok) throw new Error('Not authenticated');
+      return await res.json();
+    }
+
+    // Fetch and render games
+    async function loadGames() {
+      const res = await fetch(`${API_BASE}/games`);
+      if (!res.ok) throw new Error('Failed to load games');
+      const games = await res.json();
+      const container = document.getElementById('games-list');
+      container.innerHTML = '';
+      games.forEach(game => {
+        const card = document.createElement('div');
+        card.className = 'game-card';
+
+        const img = document.createElement('img');
+        img.src = `http://localhost:3000/${game.thumbnail}`;
+        img.alt = game.title;
+
+        const title = document.createElement('h3');
+        title.textContent = game.title;
+
+        const desc = document.createElement('p');
+        desc.textContent = game.description;
+
+        const creator = document.createElement('p');
+        creator.textContent = `By: ${game.creator.username}`;
+
+        const btnPlay = document.createElement('button');
+        btnPlay.textContent = 'Play';
+        btnPlay.onclick = () => {
+          window.open(`http://localhost:3000/${game.filePath}`, '_blank');
+        };
+
+        card.appendChild(img);
+        card.appendChild(title);
+        card.appendChild(desc);
+        card.appendChild(creator);
+        card.appendChild(btnPlay);
+        container.appendChild(card);
+      });
+    }
+
+    // Fetch and render marketplace
+    async function loadMarketplace(user) {
+      const res = await fetch(`${API_BASE}/items`);
+      if (!res.ok) throw new Error('Failed to load items');
+      const items = await res.json();
+      const container = document.getElementById('marketplace-list');
+      container.innerHTML = '';
+
+      items.forEach(item => {
+        const card = document.createElement('div');
+        card.className = 'item-card';
+
+        const img = document.createElement('img');
+        img.src = `http://localhost:3000/${item.image}`;
+        img.alt = item.name;
+
+        const name = document.createElement('h4');
+        name.textContent = item.name;
+
+        const price = document.createElement('p');
+        price.textContent = `Price: ${item.price}`;
+
+        const owned = user.inventory.some(i => i._id === item._id);
+
+        const btnBuy = document.createElement('button');
+        btnBuy.textContent = owned ? 'Owned' : 'Buy';
+        btnBuy.disabled = owned || user.currency < item.price;
+        btnBuy.onclick = async () => {
+          try {
+            const buyRes = await fetch(`${API_BASE}/items/buy/${item._id}`, {
+              method: 'POST',
+              credentials: 'include'
+            });
+            if (!buyRes.ok) throw new Error('Purchase failed');
+            showMessage('Item purchased!');
+            // Reload profile and marketplace to update currency and buttons
+            user = await loadProfile();
+            showLoggedIn(user);
+            loadMarketplace(user);
+          } catch (e) {
+            showError(e.message);
+          }
+        };
+
+        card.appendChild(img);
+        card.appendChild(name);
+        card.appendChild(price);
+        card.appendChild(btnBuy);
+        container.appendChild(card);
+      });
+    }
+
+    // Handle login
+    document.getElementById('btn-login').addEventListener('click', async () => {
+      const username = document.getElementById('login-username').value;
+      const password = document.getElementById('login-password').value;
+      try {
+        const res = await fetch(`${API_BASE}/login`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        if (!res.ok) throw new Error('Login failed');
+        const user = await loadProfile();
+        showLoggedIn(user);
+        await loadGames();
+        await loadMarketplace(user);
+        showMessage('Logged in successfully');
+      } catch (e) {
+        showError(e.message);
+      }
+    });
+
+    // Handle signup
+    document.getElementById('btn-signup').addEventListener('click', async () => {
+      const username = document.getElementById('signup-username').value;
+      const password = document.getElementById('signup-password').value;
+      try {
+        const res = await fetch(`${API_BASE}/signup`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        if (!res.ok) throw new Error('Signup failed');
+        const user = await loadProfile();
+        showLoggedIn(user);
+        await loadGames();
+        await loadMarketplace(user);
+        showMessage('Signed up and logged in!');
+      } catch (e) {
+        showError(e.message);
+      }
+    });
+
+    // Logout
+    document.getElementById('btn-logout').addEventListener('click', async () => {
+      await fetch(`${API_BASE}/logout`, { method: 'POST', credentials: 'include' });
+      location.reload();
+    });
+
+    // Upload new game form
+    document.getElementById('upload-form').addEventListener('submit', async e => {
+      e.preventDefault();
+      const title = document.getElementById('game-title').value;
+      const description = document.getElementById('game-desc').value;
+      const thumbnail = document.getElementById('game-thumbnail').files[0];
+      const gamefile = document.getElementById('game-file').files[0];
+      if (!title || !description || !thumbnail || !gamefile) {
+        showError('All fields and files are required');
+        return;
+      }
+      const formData = new FormData();
+      formData.append('title', title);
+      formData.append('description', description);
+      formData.append('thumbnail', thumbnail);
+      formData.append('gamefile', gamefile);
+
+      try {
+        const res = await fetch(`${API_BASE}/games`, {
+          method: 'POST',
+          credentials: 'include',
+          body: formData
+        });
+        if (!res.ok) throw new Error('Upload failed');
+        showMessage('Game uploaded!');
+        e.target.reset();
+        await loadGames();
+      } catch (e) {
+        showError(e.message);
+      }
+    });
+
+    // On load: check if logged in by loading profile
+    (async () => {
+      try {
+        const user = await loadProfile();
+        showLoggedIn(user);
+        await loadGames();
+        await loadMarketplace(user);
+      } catch {
+        // Not logged in: show auth forms
+        document.getElementById('auth-section').classList.remove('hidden');
+      }
+    })();
+  </script>
+</body>
+</html>
